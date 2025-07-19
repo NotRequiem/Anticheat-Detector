@@ -1,9 +1,20 @@
+SÍ QUÉ PASA, ERES UN GRINGO SUBNORMAL QUE NO TIENE CULTURA, SOLO SABES HABLAR INGLÉS Y TE ACABAS DE ENCONTRAR QUE UN DEVELOPER ESPAÑOL HA ESCRITO ESTO EN ESPAÑOL? 
+YOU DON'T TALK MONKEY LANGUAGE? OH QUÉ PENA PUES TE JODES!!!!
+
 # El Comienzo de la Batalla
 El objetivo principal de interceptar una función en Java usando la Interfaz Nativa de Java  y la Interfaz de Herramientas de la Máquina Virtual de Java es poder observar y alterar el comportamiento de una aplicación Java en tiempo de ejecución. Esto abre un mundo de posibilidades, desde la creación de herramientas de profiling y debugging hasta la modificación de juegos como Minecraft para hacer tonterías como esta y detectar anticheats en algún server peruano como SoloLe... o ####
 
 Nuestra historia comienza con un objetivo aparentemente sencillo: deobfuscar, localizar y "hookear" (interceptar) varios métodos específicos dentro del código de Minecraft. La idea era simple: ejecutar nuestro propio código cada vez que el juego llamara a una función determinada pero **AL ESTILO REQUIEM**, sin usar agentes externos de java ni pollas, sin librerías externas, sin usar la API de Forge o Fabric, sin gilipolleces en puro C y C++. 
 
-SIN EMBARGO NO SABÍA LO QUE ME PUTO ESPERABA EN ESTAS 2 SEMANAS DE INVESTIGACIÓN PARA ESTE PROYECTO.
+SIN EMBARGO NO SABÍA LO QUE ME PUTO ESPERABA EN ESTAS 2 SEMANAS DE INVESTIGACIÓN PARA ESTE PROYECTO. En esta gran historia, dos legendarios entes serán enfrentados.
+
+<p align="center">
+<img src="assets/start_2.png" align="center" title="Requiem">
+</p>
+
+<p align="center">
+<img src="assets/start_1.png" align="center" title="JVM">
+</p>
 
 ## Los Primeros y Desastrosos Intentos
 Primero empecé a deobfuscar las clases que interceptaban transacciones en Minecraft porque necesitamos saber cómo es el 'layout' de un método antes de poder hacer hooking. Esto no fue muy difícil, sabía el nombre de la clase que quería interceptar (S32PacketConfirmTransaction). El layout de la clase se encuentra en fuentes online como https://skmedix.github.io/ForgeJavaDocs/javadoc/forge/1.7.10-10.13.4.1614/net/minecraft/network/play/server/S32PacketConfirmTransaction.html, así que pude estimar directamente cómo se vería un código completo gracias a este link:
@@ -87,6 +98,7 @@ Tras leer un poco en https://medium.com/@hugosafilho/how-to-manipulate-byte-code
 **Imagina que cada método de Java es una habitación.**
 
 `onMethodEntry` sería como poner un sensor en la puerta de entrada de la habitación. Cada vez que alguien (el flujo de ejecución del programa) va a entrar, el sensor se activa y puedes realizar una acción, como anotar quién entra o a qué hora.
+
 `onMethodExit` es como poner otro sensor, pero esta vez en la puerta de salida. Cada vez que alguien va a salir de la habitación, este sensor se activa. Aquí puedes hacer otras cosas, como ver si la persona se lleva algo (el valor de retorno) o si salió porque se activó una alarma de incendios (una excepción).
 
 El prototipo de la función se ve así en los headers oficiales de la JVMTI:
@@ -179,7 +191,11 @@ void JNICALL onMethodEntry(jvmtiEnv *jvmti, JNIEnv* jni, jthread thread, jmethod
 }
 ```
 
-Ahora claro, te preguntarás (O QUIZÁS NO), ¿y cómo sabe Java que tiene que llamar a ese onMethodEntry que nosotros estamos definiendo? Para ello, tenemos que **inyectar un agente** a Minecraft, con un punto de entrada que le diga a la JVM "ey, tienes que irte aquí cada vez que entres a un método". Esto es muy simple de hacer y hay mucho código online sobre los métodos exactos para realizarlo. Como lo estamos haciendo para minecraft 1.8.9 (Java 8), usaremos `JVMTI_VERSION_1_2`.
+Ahora claro, te preguntarás (O QUIZÁS NO), ¿y cómo sabe Java que tiene que llamar a ese onMethodEntry que nosotros estamos definiendo? Para ello, tenemos que **inyectar un agente** a Minecraft, con un punto de entrada que le diga a la JVM "ey, tienes que irte aquí cada vez que entres a un método". Esto es muy simple de hacer y hay mucho código online sobre los métodos exactos para realizarlo. Como lo estamos haciendo para Minecraft 1.8.9 (Java 8), usaremos `JVMTI_VERSION_1_2`.
+
+<p align="center">
+<img src="assets/onMethodEntry.png" align="center" title="hook">
+</p>
 
 ```cpp
 JNIEXPORT jint JNICALL Agent_OnLoad(JavaVM *vm, char *options, void *reserved) {
@@ -229,18 +245,26 @@ La realidad fue un jarro de agua fría. No funcionaba?!?!?¿!!?!?!
 
 El compilador Just-In-Time de la JVM es agresivo. Si un método es pequeño (como getActionNumber), el `JIT` puede decidir **eliminar la llamada al método** y simplemente "pegar" (inline) su código directamente donde se le llama.
 
-Si el método processPacket fuera tan simple como para ser candidato a inlining (y básicament lo es...), la JVM podría optimizarlo.
+Si el método processPacket fuera tan simple como para ser candidato a inlining (y básicamente lo es...), la JVM podría optimizarlo.
 Si el método ha sido "inlinado" (no tengo ni puta idea de si existe esta palabra), conceptualmente ya no existe una "entrada" o "salida" clara para ese método en el código nativo compilado, entonces no podremos interceptarlo. 
 
-Aparentemente, puedes lanzar Java con flags para deshabilitar el inlining (`-XX:MaxInlineSize=0`) o incluso el JIT (`-Xint`), pero esto destruirá el rendimiento y solo debe usarse para depuración, además de que no vamos a decirle al usuario que cambie los jvm arguments.
+Aparentemente, puedes lanzar Java con flags para deshabilitar el inlining (`-XX:MaxInlineSize=0`) o incluso el JIT (`-Xint`), pero esto destruiría el rendimiento y solo debe usarse para depuración, además de que no vamos a decirle al usuario que cambie los jvm arguments.
 
-Fue difícil darme cuenta de esto de arriba porque tras revisar con Cheat Engine, la hook sí que estaba funcionando para otras clases (no inline), y yo seguía como imbécil empeñado en hacer que no fuese inline. Pero hay varios problemas:
+Fue difícil darme cuenta de esto de arriba porque tras revisar con Cheat Engine, la hook sí que estaba funcionando para otras clases (no inline), y yo seguía como imbécil empeñado en hacer que no fuese inline usando `jvmti->Deoptimize`. Pero hay varios problemas:
 
 1. En el momento en que se ejecuta Agent_OnLoad, **la clase S32PacketConfirmTransaction ni siquiera ha sido cargada por la JVM**, SOLO se carga cuando clickeas en el botón de "multiplayer", y mucho menos su método processPacket ha sido ejecutado las suficientes veces como para que el JIT lo considere "caliente" y decida compilarlo. Es como intentar despedir a un empleado que todavía no ha sido contratado. La operación no tiene sentido porque el estado previo (ser un empleado/estar optimizado) no existe.
 
-2. Aún así, aunque lo interceptase correctamente, justo cuando se carga la clase, **aparentemente esta ya se optimiza????**. Y claro como dije antes, una vez que un método ha sido """"inlinado"""", la llamada a ese método ha desaparecido del código compilado. Conceptualmente, ya no existe una "entrada" o "salida" para ese método en el código nativo. No puedes deoptimizar algo que ya no existe como una unidad separada.
+2. Aún así, aunque lo interceptase correctamente justo en el momento en el que se compilase, **aparentemente esta ya se optimiza????**. Y claro como dije antes, una vez que un método ha sido """"inlinado"""", la llamada a ese método ha desaparecido del código compilado. No puedes deoptimizar algo que ya no existe como una unidad separada.
 
-Descartado el primer método, pasamos al siguiente plan: el evento onVMInit, que se activa al iniciar la JVM. La idea era usar `jmvti->SetBreakpoint()` para establecer un punto de interrupción al principio del método que queríamos interceptar. Al detenerse la ejecución, podríamos hacer nuestras "cosas" y luego reanudarla.
+<p align="center">
+<img src="assets/JIT_Inline.png" align="center" title="JVM">
+</p>
+
+Descartado el primer método, pasamos al siguiente plan: el evento onVMInit, que se activa al iniciar la JVM. La idea era usar `jmvti->SetBreakpoint()` para establecer un punto de interrupción al principio del método que queríamos interceptar. Al detenerse la ejecución, podríamos hacer nuestras "cosas" (mi plan era forzar una excepción y examinar el stack actual del hilo que estuviese ejecutando la clase) y luego reanudarla.
+
+<p align="center">
+<img src="assets/JVMTI_ERROR_MUST_POSSESS_CAPABILITY.png" align="center" title="JVMTI-error">
+</p>
 
 ```cpp
 JNIEXPORT jint JNICALL Agent_OnLoad(JavaVM *vm, char *options, void *reserved) {
@@ -333,7 +357,11 @@ typedef enum {
 
 Pero vamos a ver QUÉ COJONES SI ACABO DE PONER LITERALMENTE `capabilities.can_set_breakpoint = 1;` Y SEGUÍA FALLANDO??
 
-tras buscar en internet, todos decían que únicamente ese permiso era necesario, pero no me fiaba una mierda y entonces pues copy pasteé todos los permisos que existen y ponerlos a 1
+Tras buscar en internet, todos decían que únicamente ese permiso era necesario, pero no me fiaba una mierda y entonces pues 'copy pasteé' todos los permisos que existen y los puse a 1
+
+<p align="center">
+<img src="assets/SetBreakpoint.png" align="center" title="breakpoint">
+</p>
 
 ```c
 typedef struct {
@@ -390,8 +418,12 @@ typedef struct {
 } jvmtiCapabilities;
 ```
 
-La puta JVM seguía lanzando `JVMTI_ERROR_MUST_POSSESS_CAPABILITY` después de tener **LITERALMENTE TODOS LOS PERMISOS**
-Al indagar más, me di cuenta de que el método SIEMPRE devolvería ese error si la JVM no estaba en debug mode/no tenía un agente JDWP asignado, y aquí es cuando me quería meter un disparo en la cabeza.
+La puta JVM seguía lanzando `JVMTI_ERROR_MUST_POSSESS_CAPABILITY` después de tener LITERALMENTE TODOS LOS PERMISOS
+Al indagar más, me di cuenta de que el método *siempre* devolvería ese error en mi caso si la JVM no estaba en debug mode/no tenía un agente JDWP asignado, y aquí es cuando me quería meter un disparo en la cabeza.
+
+<p align="center">
+<img src="assets/JVM_Not_In_Debug_Mode.png" align="center" title="debug">
+</p>
 
 **Tras innumerables fracasos** tratanto de poner hardware breakpoints a la función para examinar los registros de la CPU en ese momento y sacar el valor de la variable que contenía la transacción, y hacer algoritmos de byte array scanning para cada JVM existente en el universo (no es coña) con el fin de encontrar donde la JVM guardaba el codigo inline de S32PacketConfirmTransaction, **encontré un rayo de esperanza**: el evento `onClassFileLoadHook`. Este evento nos permitía interceptar el bytecode de una clase justo antes de que fuera cargado por la JVM. Esto significaba que podíamos modificar el código directamente en su forma binaria antes de que el JIT pudiera hacer de las suyas.
 
@@ -452,6 +484,20 @@ static void JNICALL onClassFileLoadHook(jvmtiEnv *jvmti, JNIEnv *jni,
     }
 }
 ```
+
+<p align="center">
+<img src="assets/onClassFileLoadHook.png" align="center" title="classloader">
+</p>
+
+<p align="center">
+<img src="assets/SecurityManager.png" align="center" title="securitymanager">
+</p>
+
+Pero cuando probé a inyectarme...
+
+<p align="center">
+<img src="assets/UnsatisfiedLinkerError.png" align="center" title="linker">
+</p>
 
 Al parecer, no había forma de poner breakpoints, la única idea que se me pasaba por la cabeza en esos momentos de inmensa desesperación era... Reescribir y recompilar la propia clase de Java en caliente e inyectar mi propio bytecode como si fuese yo una JVM?
 
@@ -515,7 +561,7 @@ Imagina LA PISCINA de constantes como el glosario o el índice de un libro muy c
 
 Cada entrada en esta tabla tiene un "tag" de 1 byte que identifica su tipo (`CONSTANT_Utf8`, `CONSTANT_Methodref`, `CONSTANT_Fieldref`, etc...), seguido de los datos correspondientes. Cuando el bytecode necesita realizar una operación, como llamar a un método o acceder a un campo, no usa nombres directamente. En su lugar, utiliza un índice de 2 bytes que apunta a la entrada correspondiente en LA PISCINA de constantes.
 
-Para nuestra misión, esto era crucial. Para poder llamar a un nuevo método nativo, primero tenía que existir en el ***LA PISCINA DE CONSTANTES*** (ok ya paro).
+Para nuestra misión, esto era crucial. Para poder llamar a un nuevo método nativo, primero tenía que existir en el ***LA PISCINA DE CONSTANTES*** (vale ya paro).
 
 ### PASO 1: Inyectar la Declaración de mi método
 
@@ -533,7 +579,7 @@ Para ello, tuve que manipular el `constant_pool` y la lista de métodos de la cl
 `add_method_ref`, para finalmente, crear la entrada `CONSTANT_Methodref`. Esta es la referencia completa y utilizable. Vincula la clase que contiene el método (nuestra clase actual, this_class) con la entrada `NameAndType` creada anteriormente.
 
 **Crear method_info:** Con las referencias listas en el `constant_pool`, creé la estructura method_info que representa al nuevo método. Esto lo pude observar mejor en https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-4.html, exactamente en la tabla del apartado 4.1:
-```
+```xml
 Table 4.1. Class access and property modifiers
 
 Flag Name	Value	Interpretation
@@ -547,7 +593,7 @@ ACC_ANNOTATION	0x2000	Declared as an annotation type.
 ACC_ENUM	0x4000	Declared as an enum type.
 ```
 Como quiero que sea público, estático y a la vez nativo, supuse que tendría que hacer una máscara de bits:
-0x0001 (`ACC_PUBLIC`) + 0x0008 (`ACC_STATIC`) + 0x0100 (`ACC_NATIVE`), eso iría en el valor de `access_flags`
+0x0001 (`ACC_PUBLIC`) + 0x0008 (`ACC_STATIC`) + 0x0100 (`ACC_NATIVE`), eso iría en el valor de `access_flags`. Así que sabiendo un poco de mates, este valor debía ser 0x0109
 
 Lo más importante aquí es que un método native no tiene cuerpo de código en Java. Por lo tanto, su lista de atributos está vacía. No tiene un atributo Code, que es donde reside el bytecode. ¡ACKTUALLYY! Un error común es intentar añadir un cuerpo a un método nativo
 
@@ -590,7 +636,7 @@ CONSTANT_InvokeDynamic	18
 
 Para cada una, seguí los índices internos hasta dar con una cuyo nombre fuera "actionNumber". El índice de esta entrada CONSTANT_Fieldref (`target_field_ref_idx`) era el que necesitaba para el bytecode.
 
-### PASO 4: Forjando mi expansión de dominio
+### PASO 4: Forjando la expansión de dominio
 
 Aquí es donde la magia ocurre. Necesitaba escribir una secuencia de opcodes de la JVM para cargar el valor de actionNumber y pasárselo a mi método. Antes de analizar el código, tenemos que entender la pieza central de la ejecución en la JVM: el stack, y sí, odio llamarlo la pila y no sé porqué, pero trataré de llamarlo así.
 
@@ -680,11 +726,49 @@ a type of every value stored into an array by aastore must be a reference type`
 
 En resumen, el atributo `Code` de un método contiene un valor `max_stack`, que le dice a la JVM el tamaño máximo que alcanzará la pila de operandos durante la ejecución de ese método. Es crucial para la asignación de memoria y la verificación. Mi secuencia de bytecode `aload_0 -> getfield` alcanza una profundidad máxima de 1 en la pila (para los más curiosos, así es como lo determiné: https://stackoverflow.com/questions/65604246/determining-the-size-of-the-operand-stack-for-a-stack-frame), pero el método original ya realiza operaciones que requieren una profundidad de al menos 2 cuando lo vi en mi disassembler (`aload_0`, `aload_1` para llamar a `buf.readShort()`). El código defensivamente asegura que max_stack sea al menos 2, cubriendo tanto las necesidades originales como las de mi inyección. Un max_stack incorrecto conduce inevitablemente a un `VerifyError`.
 
-Si el método original tuviera bloques try-catch, tendría una **tabla de excepciones**. Esta tabla define rangos de bytecode (`start_pc`, `end_pc`) protegidos por un manejador de excepciones (`handler_pc`). Al insertar N bytes de código, todas las direcciones posteriores a mi punto de inyección se desplazan, y esto es algo que ya conocía de antes al haber trabajado mucho en redirección de excepciones y stack unwinding: https://github.com/NotRequiem/veh-disasm. Por tanto era absolutamente vital recorrer esta tabla y sumar N a cualquier `start_pc`, `end_pc` o `handler_pc` que sea mayor o igual a la posición de inyección. Ignorar este paso haría que los manejadores de excepciones apuntaran a instrucciones incorrectas, que es lo que pasó. Al principio pensé que el código no estaba dentro de un try-catch (un SEH: https://learn.microsoft.com/en-us/cpp/cpp/structured-exception-handling-c-cpp?view=msvc-170), pero al parecer sí había una función más arriba embediendo todo (no sé si esta palabra existe otra vez) dentro de un handler
+Si el método original tuviera bloques try-catch, tendría una **tabla de excepciones**. Esta tabla define rangos de bytecode (`start_pc`, `end_pc`) protegidos por un manejador de excepciones (`handler_pc`). Al insertar N bytes de código, todas las direcciones posteriores a mi punto de inyección se desplazan, y esto es algo que ya conocía de antes al haber trabajado mucho en redirección de excepciones y stack unwinding: https://github.com/NotRequiem/veh-disasm. Por tanto era absolutamente vital recorrer esta tabla y sumar N a cualquier `start_pc`, `end_pc` o `handler_pc` que sea mayor o igual a la posición de inyección. Ignorar este paso haría que los manejadores de excepciones apuntaran a instrucciones incorrectas, que es lo que pasó. Al principio pensé que el código no estaba dentro de un try-catch (un SEH: https://learn.microsoft.com/en-us/cpp/cpp/structured-exception-handling-c-cpp?view=msvc-170), pero al parecer sí había una función más arriba embediendo todo (no sé si esta palabra existe otra vez) dentro de un handler.
+
+Por último, casteé mi dominio, el bytecode parecía perfecto, estaba funcionando... HABÍA CONSEGUIDO ENTRAR, TODO ESTABA YENDO BIEN
+
+<p align="center">
+<img src="assets/Bytecode.png" align="center" title="instrumentation">
+</p>
+
+<p align="center">
+<img src="assets/SecurityManager_2.png" align="center" title="securitymanager_2">
+</p>
+
+**Pero de pronto...**
+
+<p align="center">
+<img src="assets/Java Verifier.png" align="center" title="verifier">
+</p>
+
+<p align="center">
+<img src="assets/StackMapTable.png" align="center" title="SMP">
+</p>
+
+<p align="center">
+<img src="assets/smt_explanation.png" align="center" title="explanation">
+</p>
+
+<p align="center">
+<img src="assets/NoClassDefFoundError.png" align="center" title="VerifyError">
+</p>
+
+<p align="center">
+<img src="assets/error.png" align="center" title="internal_bridge_error">
+</p>
+
+<p align="center">
+<img src="assets/adapted.png" align="center" title="adapted">
+</p>
+
+**YA SE HABÍA ADAPTADO**
 
 ### PASO 5: CARGARME A MAHORAGA
 
-Por último, faltaba el golpe final. Para ello me apoyé en https://docs.huihoo.com/javaone/2007/java-se/TS-1326.pdf y descubrí la existencia de `StackMapTable` tal como mencionaba el post:
+Por último, faltaba el golpe final, mis esperanzas estaban en lo más profundo de los confines de la tierra pero no iba a darme por vencido. Para ello me apoyé en https://docs.huihoo.com/javaone/2007/java-se/TS-1326.pdf y descubrí la existencia de `StackMapTable` tal como mencionaba el post:
 ```
 Class File Modification Problems
 • Lots of serialization and deserialization details
@@ -698,7 +782,7 @@ Class File Modification Problems
 ```
 
 El stack size ya lo hemos explicado pero no sabía qué cojones era el StackMapTable, así que me puse a investigar.
-El atributo StackMapTable es una optimización para el verificador de bytecode introducida en Java 6 (entonces minecraft lo tenía porque ejecutaba Java 8). Contiene mierdas varias sobre el estado de la pila y las variables locales en puntos clave del código (como los destinos de los saltos) para que el verificador me destruya cada vez que trate de inyectar bytecode.
+El atributo StackMapTable es una optimización para el verificador de bytecode introducida en Java 6 (entonces minecraft lo debía de tener porque ejecutaba Java 8). Contiene mierdas varias sobre el estado de la pila y las variables locales en puntos clave del código (como los destinos de los saltos) para que el verificador me destruya cada vez que trate de inyectar bytecode.
 
 Así que, *Shi', here we go again....*
 
@@ -716,7 +800,7 @@ El nuevo plan sería:
 > 3. Crear un único full_frame al inicio del método (offset 0) que describiera este estado inicial.
 > 4. Empaquetar todo esto en un nuevo atributo StackMapTable.
 
-Esto no me llevó ni un día, ni dos, ni tre... Bueno, sí fueron 3, pero fue muy díficil:
+Esto no me llevó ni un día, ni dos, ni tre... Bueno sí, fueron 3, pero fue muy díficil:
 ```cpp
  void rebuild_stack_map_table(code_attribute_data& code_attr, const std::string& method_desc) {
      const uint8_t ITEM_OBJECT = 7, ITEM_INTEGER = 1, ITEM_UNINITIALIZED_THIS = 6;
@@ -779,17 +863,18 @@ Esto no me llevó ni un día, ni dos, ni tre... Bueno, sí fueron 3, pero fue mu
 
 Este código es un reflejo de mi derrame de sangre.....: entendí los tipos (`ITEM_OBJECT`, `ITEM_INTEGER`), cómo derivar las variables locales iniciales a partir de la firma del método, y cómo construir un full_frame que es el tipo de marco más detallado. Parecía PERFECTO
 
-Con mi nuevo y reluciente rebuild_stack_map_table, modifiqué mi proceso. Inyecté el bytecode, actualicé los offsets de la tabla de excepciones, ajusté el max_stack, bla bla bla todo como hasta ahora y luego llamé a mi flamante función para generar un StackMapTable teóricamente perfecto.
-Cargué la clase... y...
+Con mi nuevo y reluciente REBUILD STACK MAP TABLE, modifiqué mi proceso. Inyecté el bytecode, actualicé los offsets de la tabla de excepciones, ajusté el max_stack, bla bla bla todo como hasta ahora y luego llamé a mi flamante función para generar un StackMapTable teóricamente perfecto.
 
-**¿Pero por qué?** Mi lógica para el marco inicial era sólida como una roca. El full_frame en el offset 0 describía con precisión el estado inicial de las variables locales. El error no estaba en el marco que creé, sino en *todos los marcos que no creé*.
+Cargué la clase... y... **VerifyError.**
+
+**¿Pero por qué?!** Nuestra lógica para el marco inicial era sólida como una roca. El full_frame en el offset 0 describía con precisión el estado inicial de las variables locales. El error no estaba en el marco que creé, sino en *todos los marcos que no creé*.
 
 Aquí está la brutal revelación: **un StackMapTable necesita un marco para CADA destino de salto dentro del método XD**
 
-Mi código inyectado era lineal, no introducía jumps. Pero el método original, readPacketData, los tenía...? O, más importante aún, otros métodos que quisiera instrumentar en el futuro casi con seguridad los tendrían (bucles `for`, `while`, bloques `try-catch` que saltan a manejadores de excepciones).
+Mi código inyectado era lineal, no introducía jumps. Pero el método original, `readPacketData`, los tenía...? O, más importante aún, otros métodos relacionados que quisiera instrumentar en el futuro casi con seguridad los tendrían (bucles `for`, `while`, bloques `try-catch` que saltan a manejadores de excepciones).
 Mi inyección de código desplazó todas las instrucciones posteriores. Si el código original tenía un `goto 100`, y yo inyectaba 7 bytes en la posición 20, ese `goto` ahora debería apuntar a 107. Aunque el actualizador de bytecode podría arreglar la instrucción `goto`, el StackMapTable original seguiría teniendo una entrada para el offset 100, que ahora es incorrecto.
 
-O bien escribir un analizador de flujo de datos completo en C++, una tarea monstruosamente compleja que rivalizaría con el propio verificador de la JVM, o ser inteligente.
+Tenía dos opciones. O bien escribir un analizador de flujo de datos completo en C++, una tarea monstruosamente compleja que rivalizaría con el propio verificador de la JVM, o dormir un poco (eran las 4am) y pensar en nuevas estrategias el siguiente día con la cabeza fresca.
 
 Fue entonces cuando la idea original, la que había descartado como "un truco", volvió a mí....
 ***"Espera... si las clases compiladas con versiones de Java anteriores a la 6 no tienen un StackMapTable, la JVM debe saber cómo manejarlas. Debe tener un plan B".***
@@ -798,18 +883,83 @@ JODER QUE PUTO GENIO SOY JODER JODER
 
 Si una JVM moderna carga un archivo .class que especifica una versión reciente (Java 6+) pero carece de un atributo StackMapTable, no lanza un error. En su lugar, considera que el atributo es opcional (para la compatibilidad hacia atrás). Ante su ausencia, el verificador simplemente se encoge de hombros y dice: *"Bueno, supongo que tendré que hacer el trabajo a la antigua"*. Y entonces, realiza el análisis de flujo de datos completo calculando internamente toda la información que habría estado en la tabla.
 
-### IMAGINARY TECHNIQUE: PURPLEEEE
+### IMAGINARY TECHNIQUE: if (get_cp_string(it->name_index) == "StackMapTable") {it = attrs.erase(it);}
 
-La solución elegante fue castear simplemente eliminar el atributo por completo. Cuando una JVM moderna carga una clase que carece de este atributo, su verificador entra en un modo de compatibilidad hacia atrás, analiza el bytecode desde cero y recalcula toda la información de verificación él mismo
+<p align="center">
+<img src="assets/Downgrader.png" align="center" title="Java 6">
+</p>
+
+<p align="center">
+<img src="assets/nuke.png" align="center" title="attribute_removed">
+</p>
+
+La solución elegante fue simplemente eliminar el atributo por completo. Cuando una JVM moderna carga una clase que carece de este atributo, su verificador entra en un modo de compatibilidad hacia atrás, analiza el bytecode desde cero y recalcula toda la información de verificación él mismo
 
 La conclusión fue a la vez humillante y liberadora. Mi intento de reconstruir el StackMapTable era un ejercicio de pura arrogancia. La verdadera solución de ingeniería no era recrear un sistema complejo y propenso a errores, sino entender las reglas del sistema más grande (la JVM) y usar su propio mecanismo de respaldo a mi favor ;).
 
-Eliminar el StackMapTable no es un "jaks" como diría mi amiga Ale. Es una delegación de responsabilidad. Es reconocer que la JVM es mucho mejor calculando esa tabla que mi código en C++, y simplemente dejar que lo haga. Es una solución elegante, robusta y, lo que es más importante, correcta el 100% de las veces.
+Eliminar el StackMapTable no es un "jaks" como diría mi amiga Ale. Es una delegación de responsabilidad. Es reconocer que la JVM es mucho mejor calculando esa tabla que mi código de mierda en C++, y simplemente dejar que lo haga. Es una solución elegante, robusta y, lo que es más importante, correcta el 100% de las veces.
 
 *Hoy hemos aprendido que, a veces, la línea de código más poderosa es la que se borra.*
 
-### PASO FINAL!!: La Serialización
-Con la clase totalmente parcheada, el último paso era volver a escribir toda la estructura modificada (magic, version, el nuevo constant_pool, la lista de métodos modificada, etc.) en un vector de bytes (out_bytes), listo para ser cargado por la JVM y ejecutar nuestro código nativo.
+### El Paso Final
+Con la clase totalmente parcheada, el último paso era volver a escribir toda la estructura modificada (magic, version, el nuevo constant_pool, la lista de métodos modificada, etc.) en un vector de bytes (out_bytes), listo para ser cargado por la JVM y ejecutar nuestro código nativo:
+
+```cpp
+inline void __stdcall ClassInstrumenter::write_class_file(std::vector<unsigned char>& out_bytes) {
+    // without 0xCAFEBABE, the JVM won't let us in the club and took forever to figure this shi' out
+    write_u4(out_bytes, magic);
+    write_u2(out_bytes, minor_version);
+
+    // We're deliberately downgrading to Java 6. Why? cuz some old verifiers are grumpy
+    Log(DETAIL, "Downgrading class version to Java 6 (50.0) for verifier compatibility.");
+    write_u2(out_bytes, 50);
+
+    // Announce the new, improved size of our constant pool
+    write_u2(out_bytes, cp_count_new);
+
+    // basically this is the programming equivalent of "if it ain't broke, don't fix it."
+    out_bytes.insert(out_bytes.end(), bytes.data() + 10, bytes.data() + post_cp_offset);
+
+    // now staple our entries to the end
+    out_bytes.insert(out_bytes.end(), new_cp_entries.begin(), new_cp_entries.end());
+
+    // now the class's identity crisis: who it is, what it extends, etc etc.
+    write_u2(out_bytes, access_flags);
+    write_u2(out_bytes, this_class);
+    write_u2(out_bytes, super_class);
+
+    // The following sections are guarded by size checks. A u2 can only hold up to 65535,
+    // and if we exceed that, the class file will implode
+
+    // MSVC's macro expansion is broken on my IDE so I do it manually for my own sanity.
+    if (interfaces.size() > 0xFFFF) throw std::runtime_error("Too many interfaces.");
+    write_u2(out_bytes, static_cast<uint16_t>(interfaces.size()));
+    for (uint16_t interface_idx : interfaces) write_u2(out_bytes, interface_idx);
+
+    // fields.
+    if (fields.size() > 0xFFFF) throw std::runtime_error("Too many fields.");
+    write_u2(out_bytes, static_cast<uint16_t>(fields.size()));
+    for (auto& field : fields) write_member(out_bytes, field);
+
+    // methods.
+    if (methods.size() > 0xFFFF) throw std::runtime_error("Too many methods.");
+    write_u2(out_bytes, static_cast<uint16_t>(methods.size()));
+    for (auto& method : methods) write_member(out_bytes, method);
+
+    // class-level attributes.
+    if (class_attributes.size() > 0xFFFF) throw std::runtime_error("Too many attributes.");
+    write_u2(out_bytes, static_cast<uint16_t>(class_attributes.size()));
+    for (const auto& attr : class_attributes) write_attribute(out_bytes, attr);
+}
+```
+
+Y POR FIN
+
+<p align="center">
+<img src="assets/JVM_Bridge.png" align="center" title="callback">
+</p>
+
+**POR FIN PARECÍA QUE LA BATALLA HUBIESE ACABADO. Por fin, POR FIN MI OBRA MAESTRA ESTABA FINALIZADA.**
 
 - ¿Profesor? No sabíamos que estábamos en un museo. 
 - Pues claro que no lo estamos
@@ -1240,9 +1390,47 @@ inline uint16_t ClassInstrumenter::add_string(const std::string& str) {
 }
 ```
 
-**Aunque, sin embargo...**
+SE SIENTE FRÍO EN LA CIMA
 
-Y así, camaradas, mi odisea en este enfrentamiento épico terminó.
+CASI ENCIENDO EL MONITOR
+
+POR POCO EJECUTO MI PROGRAMA
+
+CASI PRENDO EL WIFI
+
+POR POCO USO LAS MANOS
+
+¿AH QUÉ TENÍA QUE ABRIR LOS OJOS?
+
+¿QUÉ SE SENTIRÁ PERDER?
+
+¿CÓMO SE SKIPEA EL TUTORIAL?
+
+LE PASÉ EL TECLADO A MI ABUELITA, EL PRÓXIMO CÓDIGO LO HARÉ YO
+
+NO SABÍA QUE TENÍA QUE DESCARGAR LIBRERÍAS
+
+¿CUÁNDO ACABA EL CALENTAMIENTO?
+
+BUENO AHORA SUBAMOS LA DIFICULTAD A NORMAL PORQUE SI NO ME ABURRO
+
+MI GATO PASÓ POR EL TECLADO Y ARREGLÓ EL BUG
+
+¿PARA QUÉ SIRVE EL BOTON ESTE DE AQUÍ ARRIBA QUE DICE "COMPILAR"?
+
+SE ME OLVIDÓ QUE HABÍA QUE CONECTAR EL TECLADO
+
+¿CÓMO? QUÉ TENÍA QUE ABRIR MC PARA HACER ESTE PROYECTO? TAN DIFÍCIL ERA?
+
+Espera, espera qué está pasando, estoy abriendo mc y creo que me **eQUIVOQUÉ DE VERSIÓN AYU...**
+
+<p align="center">
+<img src="assets/1.21.png" align="center" title="Minecraft">
+</p>
+
+
+
+*Y así camaradas, la odisea en este enfrentamiento épico terminó.*
 
 Aunque no hayamos ganado completamente la batalla, esto no significa el fin. La derrota de un individuo, por más poderoso que sea, no extingue la llama de una causa si esta ha sido transmitida a otros. La muerte es una de esas sombras, una aparente pérdida que oculta una verdad más luminosa: el poder de la herencia y la continuidad de la voluntad a través de las generaciones. Con esto dicho, transfiero este proyecto a la comunidad para que puedan hacer uso de su poder... Y, quién sabe, quizás algún día ganar la guerra y conseguir un método de inyección binaria perfecto para cualquier JVM que exista en la faz de nuestro querido planeta.
 
