@@ -52,7 +52,7 @@ By using transactions, the anticheat can know if a packet has for certain reache
 Almost every anticheat has its unique way of sending those transactions that are the pillar of modern anticheat detection, which means they can be abused to fingerprint an anticheat. This simple and known approach is what the module abuses to create heuristics  that attempt to detect the unique randomization pattern of every anticheat.
 
 # Anticheat Detection List
-*The module focuses only on the most used anticheats on the Java market, excluding anticheats that do not send transactions (NCP), anticheats that are heavily outdated (Buzz, Grim, Matrix, AAC, etc...), anticheats that are known to only be present in one specific server (for example, Hypixel's Watchdog), or anticheats mainly optimized for Bedrock to my knowledge (Astro).*
+*The module focuses only on the most used anticheats on the Java market, excluding anticheats that do not send transactions (NCP), anticheats that are heavily outdated (Buzz, Matrix, AAC, etc...), anticheats that are known to only be present in one specific server (for example, Hypixel's Watchdog), or anticheats mainly optimized for Bedrock to my knowledge (Astro).*
 
 ```
 1. Polar - jk, i love Lucky :)
