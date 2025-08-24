@@ -43,15 +43,21 @@ void JNICALL onClassFileLoadHook(jvmtiEnv* /*jvmti*/, JNIEnv* /*env*/, jclass /*
             std::vector<unsigned char> new_bytes;
             // Instrument S32, telling the instrumenter to create a native method named 'logServerTransactionId'
             instrumenter.instrument_and_get_bytes(new_bytes, "actionNumber", "readPacketData", "(Lnet/minecraft/network/PacketBuffer;)V", "logServerTransactionId");
-
+        
             if (new_bytes.size() > 0x7FFFFFFF) {
                 throw std::runtime_error("Instrumented class size exceeds jint limit.");
             }
-
-            g_jvmti->Allocate(new_bytes.size(), new_class_data);
+        
+            jvmtiError error = g_jvmti->Allocate(new_bytes.size(), new_class_data);
+            
+            if (error != JVMTI_ERROR_NONE) {
+                Log(ERROR, "Failed to allocate memory for instrumented class.");
+                throw std::runtime_error("JVMTI Allocate failed for S32PacketConfirmTransaction.");
+            }
+        
             memcpy(*new_class_data, new_bytes.data(), new_bytes.size());
             *new_class_data_len = static_cast<jint>(new_bytes.size());
-
+        
             Log(SUCCESS, "S32PacketConfirmTransaction instrumented successfully.");
         }
         else if (strcmp(name, "net/minecraft/network/play/client/C0FPacketConfirmTransaction") == 0) {
